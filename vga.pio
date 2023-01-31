@@ -21,26 +21,24 @@ Back porch: 48
 
 .program vga
 ; IRQs
-;   irq0: set during visible area vertically
+;   irq0: 
 ;   irq1: set during visible line horizontally
 color:
     ; this is too slow, autopull needs to work
     ; and also double clock speed
-    wait 0 irq 1
+    wait 0 irq 0
     ;pull IfEmpty NoBlock
     set pins 1 [1]
     set pins 0
 ;--------------------
 hsync:
-    wait 0 irq 0                ; 1
     ; start line, visible area
-    irq clear 1                 ; 1 data start
-    set x 21    ; 638=22*29     ; 1
+    set x 21    ; 638=22*29 ; 1 data start
 hloop_data:
-    jmp x-- hloop_data [28]     ; 638 data end 640
+    jmp x-- hloop_data [28]     ; 638
+    irq set 0                   ; 1 data end 640
     ; front porch
-    irq set 1                   ; 1 front start
-    nop [13]                    ; 14
+    nop [14]                    ; 15 front start
     ; pulse
     set x 4     ; 95=5*19       ; 1 front end 16
     set pins 0                  ; 1 pulse start
@@ -49,18 +47,16 @@ hloop_pulse:
     ; back
     set pins 1                  ; 1 back start
     nop [31]                    ; 32
-    nop [13]                    ; 13 back end 47 !!!
+    nop [13]                    ; 14
+    irq clear 0 ;start data     ; 1 back end 48
 ;-------------------------------; Total  800 (800)
 vsync:
     ; start row, visible area
-    set x 16    ; 476=17*28     ; 1 data start
-    irq clear 0                 ; 1 this ordering prevents additional hsync
-                                ; however, now we need to signal color to start
+    set x 16 [3]    ; 476=17*28 ; 4 data start
 vloop_data:
-    jmp x-- vloop_data [27]     ; 476
-    ; front porch
-    nop [2]                     ; 2 data end 480
-    irq set 0 [9]               ; 10 front
+    jmp x-- vloop_data [27]     ; 476 data end 480
+    ; front porch               
+    nop [9]                     ; 10 front
     ; pulse
     set pins 0 [1]              ; 2 pulse
     ; back porch
@@ -103,7 +99,7 @@ static inline void vga_program_init(
     pio_sm_config cfg_hsync = vga_program_get_default_config(offset);
     sm_config_set_set_pins(&cfg_hsync, PHSYNC, 1);
     sm_config_set_clkdiv(&cfg_hsync, 2.0);
-    sm_config_set_wrap(&cfg_hsync, offset+3, offset+14);
+    sm_config_set_wrap(&cfg_hsync, offset+3, offset+13);
     pio_sm_init(pio, SMHSYNC, offset+3, &cfg_hsync);
 
     // Config vsync
@@ -112,9 +108,9 @@ static inline void vga_program_init(
     pio_sm_config cfg_vsync = vga_program_get_default_config(offset);
     sm_config_set_set_pins(&cfg_vsync, PVSYNC, 1);
     // Set clock to 525*59.94 Hz (divide by 800 plus general /2)
-    sm_config_set_clkdiv(&cfg_vsync, 1600);
-    sm_config_set_wrap(&cfg_vsync, offset+15, offset+21);
-    pio_sm_init(pio, SMVSYNC, offset+15, &cfg_vsync);
+    sm_config_set_clkdiv(&cfg_vsync, 1600.0);
+    sm_config_set_wrap(&cfg_vsync, offset+14, offset+19);
+    pio_sm_init(pio, SMVSYNC, offset+14, &cfg_vsync);
 
     // Enable interrupts
 

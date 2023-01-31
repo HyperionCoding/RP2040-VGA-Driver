@@ -120,6 +120,7 @@ int main(){
     // For USB serial
     stdio_init_all();
 
+    // Waiting for usb-uart to connect
     for(int i=0; i<20; i++){
         printf("Waiting... (%d)\n", i);
         sleep_ms(500);
@@ -129,14 +130,10 @@ int main(){
     init_pio(&piod);
     // Start program
     vga_program_init(piod.pio, piod.offset);
-    gpio_put(PVSYNC, 1);
-    gpio_put(PHSYNC, 1);
 
     printf("offset: %d\n", piod.offset);
 
-    uint8_t vsync_pc = 0;
-    pio_sm_put_blocking(piod.pio, piod.sm, 0x0);
+    //pio_sm_put_blocking(piod.pio, piod.sm, 0xAAAAAAAA);
     while(1){
-        
     }
 }
