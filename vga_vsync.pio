@@ -1,0 +1,33 @@
+.program vga_vsync
+
+vsync:
+    ; start row, visible area
+    set x 16 [3]    ; 476=17*28 ; 4 data start
+vloop_data:
+    jmp x-- vloop_data [27]     ; 476 data end 480
+    ; front porch               
+    irq clear 1 [9]             ; 10 front
+    ; pulse
+    set pins 0 [1]              ; 2 pulse
+    ; back porch
+    set pins 1 [31]             ; 32 back start
+    irq set 1                   ; 1 back end 33
+
+% c-sdk {
+#include "../vga.h"
+
+static inline void vga_vsync_program_init(
+    PIO pio, uint offset) {
+    
+    // Config vsync
+    pio_gpio_init(pio, PVSYNC);
+    pio_sm_set_consecutive_pindirs(pio, SMVSYNC, PVSYNC, 1, true);
+    pio_sm_config cfg_vsync = vga_vsync_program_get_default_config(offset);
+    sm_config_set_set_pins(&cfg_vsync, PVSYNC, 1);
+    // Set clock to 525*59.94 Hz (divide by 800 plus general /2)
+    sm_config_set_clkdiv(&cfg_vsync, 1600.0);
+
+    sm_config_set_wrap(&cfg_vsync, vga_vsync_wrap_target+offset, vga_vsync_wrap+offset);
+    pio_sm_init(pio, SMVSYNC, vga_vsync_wrap_target+offset, &cfg_vsync);
+}
+%}

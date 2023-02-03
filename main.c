@@ -3,9 +3,29 @@
 #include "pico/cyw43_arch.h"
 #include "hardware/pio.h"
 
-#include "build/vga.pio.h"
+#include "build/vga_rgb.pio.h"
+#include "build/vga_hsync.pio.h"
+#include "build/vga_vsync.pio.h"
 
-#define LED_PIN 1
+/*
+Timings: http://tinyvga.com/vga-timing/640x480@60Hz
+Resolution: 640x480 @ 59.94Hz (god damn ntsc)
+Whole resolution: 800x525
+Pixel frequency: 25.175 MHz
+Line frequency: 31.46875 kHz
+Hsync: 800 pixels (one line)
+Vsync: 525 lines
+
+Vertical timing (lines):
+Front porch: 10
+Sync pulse: 2
+Back porch: 33
+
+Horizontal timing (pixels):
+Front porch: 16
+Sync pulse: 96
+Back porch: 48
+*/
 
 /*
 VERIFY LIST:
@@ -34,63 +54,6 @@ Timing measurements (target):
     hsync count:    480         (480) FINE
 */
 
-/*
-TODO:
-    signal color to start from vsync code (since the
-    first hsync comes after the first data)
-    Currently color starts two cycles too late
-*/
-
-/*
-Timings: http://tinyvga.com/vga-timing/640x480@60Hz
-Resolution: 640x480 @ 59.94Hz (god damn ntsc)
-Whole resolution: 800x525
-Pixel frequency: 25.175 MHz
-Line frequency: 31.46875 kHz
-Hsync: 800 pixels (one line)
-Vsync: 525 lines
-
-Vertical timing (lines):
-Front porch: 10
-Sync pulse: 2
-Back porch: 33
-
-Horizontal timing (pixels):
-Front porch: 16
-Sync pulse: 96
-Back porch: 48
-*/
-
-struct PIO_data{
-    PIO pio;
-    uint offset;
-    uint sm;
-};
-typedef struct PIO_data PIO_data;
-
-// Verify pin numbers by blinking them
-void test_pins(){
-    // Enable pins
-    // Since dir=1 means output, we can repurpose the mask
-    uint32_t mask =
-        (1 << PHSYNC) |
-        (1 << PVSYNC) |
-        (1 << PRED)   |
-        (1 << PGREEN) |
-        (1 << PBLUE);
-    
-    gpio_init_mask(mask);
-    gpio_set_dir_masked(mask, mask);
-
-    while(1){
-        printf("%d\n", mask);
-        gpio_put_masked(mask, mask);
-        sleep_ms(250);
-        gpio_put_masked(mask, 0);
-        sleep_ms(250);
-    }
-}
-
 void set_sys_clock(){
     /* Calculated using 
     /pico-sdk/src/rp2_common/hardware_clocks/scripts/vcocalc.py
@@ -104,36 +67,35 @@ void set_sys_clock(){
     set_sys_clock_pll(vco_freq, post_div1, post_div2);
 }
 
-void init_pio(PIO_data* piod){
-    piod->pio = pio0;
+void init_pio(PIO pio){
+    // Add programs
+    uint offset_rgb = pio_add_program(pio, &vga_rgb_program);
+    uint offset_hsync = pio_add_program(pio, &vga_hsync_program);
+    uint offset_vsync = pio_add_program(pio, &vga_vsync_program);
 
-    // Find unused sm
-    piod->sm = pio_claim_unused_sm(piod->pio, true);
-
-    // Load program
-    piod->offset = pio_add_program(piod->pio, &vga_program);
+    // Init programs
+    vga_rgb_program_init(pio, offset_rgb);
+    vga_hsync_program_init(pio, offset_hsync);
+    vga_vsync_program_init(pio, offset_vsync);
 }
 
 int main(){
-    // Clock to 42.35 MHz
+    // Clock to 50.35 MHz
     set_sys_clock();
     // For USB serial
     stdio_init_all();
 
     // Waiting for usb-uart to connect
-    for(int i=0; i<20; i++){
-        printf("Waiting... (%d)\n", i);
-        sleep_ms(500);
-    }
-    // PIO
-    PIO_data piod;
-    init_pio(&piod);
-    // Start program
-    vga_program_init(piod.pio, piod.offset);
+    printf("Waiting... \n");
+    sleep_ms(5000);
 
-    printf("offset: %d\n", piod.offset);
+    // Config PIO
+    PIO pio = pio0;
+    init_pio(pio);
 
-    //pio_sm_put_blocking(piod.pio, piod.sm, 0xAAAAAAAA);
-    while(1){
+    // Start pio
+    pio_enable_sm_mask_in_sync(pio, 0b0111);
+
+    while (1) {
     }
 }

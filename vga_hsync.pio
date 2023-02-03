@@ -1,0 +1,38 @@
+.program vga_hsync
+
+hsync:
+    ; start line, visible area
+    set x 21    ; 638=22*29 ; 1 data start
+hloop_data:
+    jmp x-- hloop_data [28]     ; 638
+    irq set 0                   ; 1 data end 640
+    ; front porch
+    nop [14]                    ; 15 front start
+    ; pulse
+    set x 4     ; 95=5*19       ; 1 front end 16
+    set pins 0                  ; 1 pulse start
+hloop_pulse:
+    jmp x-- hloop_pulse [18]    ; 95 pulse end 96
+    ; back
+    set pins 1                  ; 1 back start
+    nop [31]                    ; 32
+    nop [13]                    ; 14
+    irq clear 0 ;start data     ; 1 back end 48
+
+% c-sdk {
+#include "../vga.h"
+
+static inline void vga_hsync_program_init(
+    PIO pio, uint offset) {
+    
+    // Config hsync
+    pio_gpio_init(pio, PHSYNC);
+    pio_sm_set_consecutive_pindirs(pio, SMHSYNC, PHSYNC, 1, true);
+    pio_sm_config cfg_hsync = vga_hsync_program_get_default_config(offset);
+    sm_config_set_set_pins(&cfg_hsync, PHSYNC, 1);
+    sm_config_set_clkdiv(&cfg_hsync, 2.0);
+
+    sm_config_set_wrap(&cfg_hsync, vga_hsync_wrap_target+offset, vga_hsync_wrap+offset);
+    pio_sm_init(pio, SMHSYNC, vga_hsync_wrap_target+offset, &cfg_hsync);
+}
+%}

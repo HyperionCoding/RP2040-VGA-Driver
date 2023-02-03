@@ -19,7 +19,13 @@ add_executable(${PROJECT_NAME}
 )
 
 pico_generate_pio_header(${PROJECT_NAME}
-    ${CMAKE_CURRENT_LIST_DIR}/vga.pio
+    ${CMAKE_CURRENT_LIST_DIR}/vga_rgb.pio
+)
+pico_generate_pio_header(${PROJECT_NAME}
+    ${CMAKE_CURRENT_LIST_DIR}/vga_hsync.pio
+)
+pico_generate_pio_header(${PROJECT_NAME}
+    ${CMAKE_CURRENT_LIST_DIR}/vga_vsync.pio
 )
 
 # Link to pico_stdlib (gpio, time, etc. functions)

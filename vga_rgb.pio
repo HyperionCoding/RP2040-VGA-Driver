@@ -1,0 +1,32 @@
+.program vga_rgb
+
+color:
+    ;wait 1 irq 1
+    ;out pins 4
+    set pins 14 [7]
+    set pins 0 [7]
+
+% c-sdk {
+#include "../vga.h"
+
+static inline void vga_rgb_program_init(
+    PIO pio, uint offset) {
+    
+    // Config color data
+    pio_gpio_init(pio, PEMPTY);
+    pio_gpio_init(pio, PBLUE);
+    pio_gpio_init(pio, PGREEN);
+    pio_gpio_init(pio, PRED);
+    pio_sm_set_consecutive_pindirs(pio, SMCOLOR, PEMPTY, 4, true);
+
+    pio_sm_config cfg_color = vga_rgb_program_get_default_config(offset);
+    sm_config_set_set_pins(&cfg_color, PEMPTY, 4);
+    // Set PIO clock to half of system -> 25.175 MHz
+    sm_config_set_clkdiv(&cfg_color, 2.0);
+    // Autopull, threshold 32
+    sm_config_set_out_shift(&cfg_color, true, true, 32);
+    
+    sm_config_set_wrap(&cfg_color, vga_rgb_wrap_target+offset, vga_rgb_wrap+offset);
+    pio_sm_init(pio, SMCOLOR, vga_rgb_wrap_target+offset, &cfg_color);
+}
+%}
