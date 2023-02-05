@@ -2,6 +2,8 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "hardware/pio.h"
+#include "hardware/dma.h"
+#include "hardware/irq.h"
 
 #include "build/vga_rgb.pio.h"
 #include "build/vga_hsync.pio.h"
@@ -54,6 +56,16 @@ Timing measurements (target):
     hsync count:    480         (480) FINE
 */
 
+/*
+1 bit color frame buffer for output. Each byte encodes
+two pixels and thus it takes only very modest 153 kB.
+More dense data would be possible but writing would be harder.
+Format: rgb0rgb0
+*/
+#define FRAMEBUFFER_W 640/2
+#define FRAMEBUFFER_H 480
+uint8_t frame_buffer[FRAMEBUFFER_W][FRAMEBUFFER_H];
+
 void set_sys_clock(){
     /* Calculated using 
     /pico-sdk/src/rp2_common/hardware_clocks/scripts/vcocalc.py
@@ -79,23 +91,77 @@ void init_pio(PIO pio){
     vga_vsync_program_init(pio, offset_vsync);
 }
 
+uint init_dma(void* source, uint32_t count){
+    // RGB data DMA
+    int channel = dma_claim_unused_channel(true);
+    channel = 0;
+    // Config
+    dma_channel_config c = dma_channel_get_default_config(channel);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+    channel_config_set_read_increment(&c, true);
+    channel_config_set_write_increment(&c, false);
+    channel_config_set_dreq(&c, DREQ_PIO0_TX0);
+
+    volatile void* dest = &pio0_hw->txf[0];
+    dma_channel_configure(
+        channel,    // Channel to be configured
+        &c,         // The configuration we just created
+        dest,       // The initial write address
+        source,     // The initial read address
+        count,      // Number of transfers; in this case each is 1 byte.
+        false       // Start immediately.
+    );
+    return channel;
+}
+
+void __isr DMA_irq_handler(){
+    irq_clear(DMA_IRQ_0);
+    dma_hw->ints0 = 1 << 0;
+    dma_channel_set_read_addr(0, &frame_buffer, true);
+}
+
+
+void fill_frame_buffer(){
+    for(int x=0; x<FRAMEBUFFER_W; ++x){
+        for(int y=0; y<FRAMEBUFFER_H; ++y){
+            if (x < 80) {
+                frame_buffer[x][y] = 0x0F;
+            } else if (x < 160) {
+                frame_buffer[x][y] = 0xFF;
+            }
+        }
+    }
+}
+
 int main(){
     // Clock to 50.35 MHz
     set_sys_clock();
     // For USB serial
     stdio_init_all();
+    
+    fill_frame_buffer();
 
     // Waiting for usb-uart to connect
-    printf("Waiting... \n");
     sleep_ms(5000);
 
-    // Config PIO
+    // Configure PIO
     PIO pio = pio0;
     init_pio(pio);
 
-    // Start pio
+    // Configure DMA, 32 bits transfer size thus /4
+    uint dma_channel = init_dma(&frame_buffer, sizeof(frame_buffer)/4);
+    
+    // Start pios
     pio_enable_sm_mask_in_sync(pio, 0b0111);
 
+    dma_channel_set_irq0_enabled(dma_channel, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, DMA_irq_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    // Call once to start DMA
+    DMA_irq_handler();
+
+    printf("Start\n");
     while (1) {
     }
 }

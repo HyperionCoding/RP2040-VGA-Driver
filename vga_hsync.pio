@@ -2,10 +2,10 @@
 
 hsync:
     ; start line, visible area
-    set x 21    ; 638=22*29 ; 1 data start
+    set x 21    ; 638=22*29     ; 1 data start
 hloop_data:
     jmp x-- hloop_data [28]     ; 638
-    irq set 0                   ; 1 data end 640
+    irq set 0   ;end data       ; 1 data end 640
     ; front porch
     nop [14]                    ; 15 front start
     ; pulse

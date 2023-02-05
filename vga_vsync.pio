@@ -11,7 +11,7 @@ vloop_data:
     set pins 0 [1]              ; 2 pulse
     ; back porch
     set pins 1 [31]             ; 32 back start
-    irq set 1                   ; 1 back end 33
+    nop                         ; 1 back end 33
 
 % c-sdk {
 #include "../vga.h"
